@@ -1,0 +1,368 @@
+#! /usr/bin/perl
+# vim:et:sw=4:ts=4
+
+use Getopt::Long qw(:config no_ignore_case bundling);
+use File::Basename;
+
+my $PROG = basename($0);
+
+$VERSION = '1.0.0';
+$config = '/etc/nagios/nagios2influx.cfg';
+%Config;
+
+GetOptions (
+    "d|debug=s"    => \$debug,
+    "f|file=s"     => \$config,
+    "D|perfdata=s" => \$perfdata,
+    "h|help=s"     => \$help,
+    "n|preserve"   => \$preserve,
+    "N|dryrull"    => \$dryrun,
+    "T|timefactor" => \$timefactor)
+    or die("Error in command line arguments\n");
+
+%LogLvl = (
+    "Decode"   => 64,
+    "Data"     => 32,
+    "Debug"    => 16,
+    "Settings" => 8,
+    "Files"    => 4,
+    "Output"   => 2,
+    "HTTP"     => 1,
+);
+
+if ($help) {
+	Usage();
+	exit 1;
+}
+
+checkFile("config", $config);
+
+my $errstr = readConfig($config, \%Config);
+cmdlineOverride($debug, $perfdata, $timefactor);
+
+Log ($LogLvl{Settings}, "--");
+Log ($LogLvl{Settings}, "$_=$Config{$_}") for (keys %Config);
+Log ($LogLvl{Settings}, "--");
+
+process($Config{perfdata});
+
+sub help {
+	print "$PROG\t[-d|--debug debug] [-D|--perfdata file]\n";
+	print "\t\t[-f|--file file] [-n|--preserve] [-N|--dryrun]\n";
+	print "\t\t[-T|--timefactor]\n";
+	print "$PROG [-h|--help]\n";
+}
+
+sub checkFile {
+    my ($type, $filename) = @_;
+    die "No $type file specified\n" unless ($filename);
+    die "$filename: file not found\n" unless (-e $filename);
+    die "$filename: permission denied\n" unless (-r $filename);
+}
+
+sub Log {
+    my ($lvl, $msg) = @_;
+    if ($Config{debug} & $lvl) { printf STDERR "[%3d] %s: %s\n", $lvl, $PROG, $msg; };
+}
+
+sub configDefaults {
+    $Config{debug} = 0;
+    $Config{timefactor} = 9;
+    $Config{timereplacement} = "Time";
+    $Config{separator} = "";
+    $Config{global_prefix} = "";
+}
+
+sub cmdlineOverride {
+    my ($debug, $perfdata, $timefactor) = @_;
+    $Config{debug} = $debug if ($debug);
+    $Config{perfdata} = $perfdata if ($perfdata);
+    $Config{timefactor} = $timefactor if ($timefactor);
+}
+
+sub readConfig {
+    configDefaults;
+    my ($filename, $hashref) = @_;
+    open my $FH, '<', $filename or ## no critic (RequireBriefOpen)
+        return "cannot open $filename: $OS_ERROR";
+    my ($key, $val);
+    while (<$FH>) {
+        next if /^\s*#/;        # skip commented lines
+        s/^\s+//;               # removes leading whitespace
+        /^([^=]+)\s*=\s*(.*)$/x and do { # splits into key=val pairs
+            $key = $1;
+            $val = $2;
+            $key =~ s/\s+$//;   # removes trailing whitespace
+            $val =~ s/\s+$//;   # removes trailing whitespace
+            $hashref->{$key} = $val;
+        };
+    }
+    close $FH or return "close failed for $filename: $OS_ERROR";
+    Log $LogLvl{Files}, "Config:$config";
+    return q();
+}
+
+sub output {
+    my $data = shift;
+    if ($Config{output} eq "stdout") {
+        print $data;
+        return;
+    }
+    use LWP::UserAgent;
+    my $ua = LWP::UserAgent->new;
+     
+    my $server_endpoint = $Config{output}."/write?db=".$Config{database}."&u=".$Config{username}."&p=".$Config{password};
+    my $req = HTTP::Request->new(POST => $server_endpoint);
+	Log $LogLvl{Output}, $data;
+     
+    # add POST data to HTTP request body
+    if  ($dryrun) {
+        Log $LogLvl{HTTP}, sprintf "%s [%s] (%d)", $server_endpoint, "-0-", length($data);
+        return;
+    }
+
+    $req->content($data);
+    my $resp = $ua->request($req);
+    if ($resp->is_success) {
+        my $message = $resp->decoded_content;
+        Log $LogLvl{HTTP}, sprintf "%s [%s] (%d)", $server_endpoint, $resp->code, length($data);
+    }
+    else {
+        print STDERR "HTTP POST error code: ", $resp->code, "\n";
+        print STDERR "HTTP POST error message: ", $resp->message, "\n", $data, "\n";
+    }
+}
+
+sub parseFormat {
+    my ($fmt, $delim) = @_;
+    my @c;
+    my $i = 0;
+    Log $LogLvl{Debug}, "Delim:$delim.";
+    foreach (split /$delim/, $fmt) {
+        if (/^tag=(.*)/) { 
+            $c[$i]{type} = "tag";
+            $c[$i]{tag} = $1;
+        }
+        elsif ($_) {
+            $c[$i]{type} = $_;
+        }
+        else {
+            $c[$i]{type} = "blank";
+        }
+        Log $LogLvl{Debug}, sprintf ("Column %d:%s%s.", $i, $c[$i]{type}, ($c[$i]{type} eq "tag") ? "=".$c[$i]{tag} : "");
+        $i++;
+    }
+    return @c;
+}
+
+sub processMeasurements {
+    my ($raw) = @_;
+    my @metric;
+    foreach (split /\s/, $raw) {
+        my ($key,$val) = split /=/, $_, 2;
+        my @data = split /;/, $val;
+        Log $LogLvl{Decode}, $key."=".$data[0];
+        $data[0] =~ m/([.+-\d]*)(.*)/;
+        my $units = $2;
+        my $factor = 1;
+        $factor = 1000 if ($units eq "ms");
+        $factor = 1000000 if ($units eq "us");
+        $data[0] = $1/$factor;
+        $key = $Config{timereplacement} if ($key eq "time" && $Config{timereplacement});
+        push @metric, $key."=".$data[0];
+    }
+    return @metric;
+}
+
+sub processDataline {
+    my ($l, $delim, @c) = @_;
+    my $label = $Config{global_prefix};
+    my $tsp = "";
+    my $tag = "";
+    my @m;
+
+    my $i = 0;
+    foreach (split /$delim/, $l) {
+        if ($c[$i]{type}) {
+            if (lc($c[$i]{type}) eq "label") {
+                s/ /$Config{separator}/g;
+                $label .= sprintf("%s%s", ($label) ? "." : "", $_);
+            }
+            if ($c[$i]{type} eq "tag") {
+                return if (lc($c[$i]{tag}) eq "state" && $_ eq "UNKNOWN");
+                s/ /$Config{separator}/g;
+                $tag .= sprintf("%s%s=%s", ($tag) ? "," : "", $c[$i]{tag}, $_);
+            }
+            elsif (lc($c[$i]{type}) eq "time") {
+                $tsp = $_ * (10 ** $Config{timefactor});
+            }
+            elsif (lc($c[$i]{type}) eq "data") {
+                @m = processMeasurements($_);
+            }
+        } 
+        $i++;
+    }
+    my $data;
+    foreach (@m) {
+        my $str = "$label,$tag $_ $tsp";
+		$data .= "\n" if ($data);
+        $data .= "$str";
+    }
+    output($data) if ($data);
+    return;
+}
+
+sub processDatafile {
+    my ($filename, $delim, @c) = @_;
+    my $data;
+
+    open DATA, '<', $filename or die "$filename: $!\n";
+    Log $LogLvl{Files}, "Reading $filename ...";
+    while(<DATA>) {
+        chomp;
+        Log $LogLvl{Data}, "$_";
+        processDataline($_, $delim, @c);
+    }
+    close DATA;
+}
+
+sub process {
+    my ($filename) = @_;
+    my @column = parseFormat($Config{perfformat}, $Config{perfdelimiter});
+    checkFile("data", $filename);
+    if ($preserve || $dryrun) {
+        processDatafile($filename, $Config{perfdelimiter}, @column);
+    }
+    else {
+        my $datafile = $filename.".".$$;
+        Log $LogLvl{Files}, "Renaming $filename to $datafile";
+        rename $filename, $datafile or die "Renaming $filename: $!\n";    
+        processDatafile($datafile, $Config{perfdelimiter}, @column);
+        Log $LogLvl{Files}, "Removing $datafile";
+        unlink $datafile;
+    }
+}
+
+=pod
+
+=encoding utf8
+
+=head1 nagios2influx
+
+Write nagios perforance data directly to InfluxDB.
+
+=head1 SYNOPSIS
+
+ nagios2influx [-d|--debug debug] [-D|--perfdata file]
+          [-f|--file file] [-n|--preserve] [-N|--dryrun]
+          [-T|--timefactor]
+
+ nagios2influx [-h|--help]
+
+=head1 DESCRIPTION
+
+Nagios is great. InfluxDB is great. While you are performing service 
+checks in Nagios they are (probably) creating performance data as a 
+by-product. If not you might as well be. 
+
+There are mechanisms for inserting this data into InfluxDB's time 
+series database, but htere have their limitations, and most involve 
+going through some form of graphite-like interface. nagios2influx 
+bypasses graphite and writes directly to InfluxDB using either of 
+the native udp or tcp interfaces. 
+
+nagios2influx parses Nagios produced performance data and constructs 
+InfluxDB line format metrics, readly to be set to InfluxDB's UDP 
+listener (via stdout to be subsequently piped), or TCP listener.
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<-d>|B<--debug> B<debug level>>
+
+This sets the verbosity level of the debug output. 
+
+Debug output is written to stderr, it is left to the caller to 
+redirect the debug output to a suitable log file.
+
+
+Debug level is a bit mask. Default is 0 (silent).
+
+  1: HTTP summary
+  2: InfluxDB line format output
+  4: file access
+  8: configuration settings
+ 16: deconstruction of the perfdata line format
+ 32: displays raw perfdata line
+ 64: displays the prefdata parse into separate metrics.
+
+See B<Examples>.
+
+=item B<-D>|B<--perfdata> B<file>
+
+Specify the locaction of the nagios performancer data file.
+
+=item B<-f>|B<--file> B<file>
+
+Specify the locaction of the configuration file. 
+Default /etc/nagios/nagios2influx.cfg.
+
+=item B<-n>|B<--preserve>
+
+The normal operation is to move the performance datafile to a 
+new file, appending the process id to the performace data file,
+and to delete this file once processing is complete.
+
+The option processes the file in-place, leaving it intact for 
+further processing. It is expected that this further processing
+will delete or truncate the datfile thus ensuring that the same
+data is not processes again on sebsequent runs.
+
+=item B<-N>|B<--dryrun>
+
+Implies B<-n>. No data is written to InfluxDB. Used for debugging
+configuration.  If the configuration would ordinarily post to HTTP,
+the return status code is listed as 0.
+
+=item B<-T>|B<--timefactor> I<N>
+
+Default 9. Nagios writes performance data timestamped by epoch seconds.
+InfluxDB expects epoch nanoseconds, this is a difference of 9 orders
+of magnitude. Nagios timestamps are multipled by 10 to the power
+of this value.
+
+=back
+
+=head1 EXAMPLES
+
+To run using a test configuration file, preserving the test datafile,
+display configuration settings and decoded metrics.
+
+nagios2influx -D perfdata.out -f nagios2influx.test -N -d 72
+
+To write to InfluxDB's UDP listener on port 8086, while directing the
+debug information (file access and configuration settings) to a log file.
+
+nagios2influx -d12 2> /var/log/nagios2influx.log | nc -u localhost 8086
+
+=head1 ENVIRONMENT
+
+None.
+
+=head1 FILES
+
+=over 8
+
+=item F</etc/nagios/nagios2influx.cfg>
+
+=back
+
+=head1 AUTHOR
+
+Andrew Pickin
+
+=head1 SEE ALSO
+
+L<nagios2influx.cfg(5)>
+

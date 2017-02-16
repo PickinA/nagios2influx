@@ -1,0 +1,7 @@
+Package: nagios2influx
+Section: net
+Architecture: all
+Version: __VERSION__-__RELEASE__
+Description: Nagios performance data to Influx DB
+ .
+Maintainer: Andrew Pickin

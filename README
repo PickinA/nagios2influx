@@ -1,0 +1,113 @@
+nagios2influx takes Nagios perfornace data and writes it directly into InfluxDB's time sequence database in order that this data might be presented, for example using Grafana.
+
+The notivation for this plugin can when I failed to to get other projects to work based that were around the Graphite interface. I had no need for Graphite and thought there should be a simpler and more straight forward solution. I had previously used the nagiosgraph plugin (indeed still do) to display graphic historic data from Nagios. However I wanted to get the performace data into other databoards where data is gathered from other sources.  
+
+Installation
+============
+
+Install nagios, influxdb and grafana.
+
+The make file is capable of building RPM and Debian like package, using 
+
+ # make rpm
+
+or
+
+ # make deb
+
+as appropriate. (Note for the debian version you need to be root or sudo)
+
+If you wish to install by hand here is the RPM manifest.
+
+-rw-rw----    1 nagios  nagios /etc/nagios/nagios2influx.cfg
+-rwxr-xr-x    1 root    root   /usr/bin/nagios-perf
+-rwxr-xr-x    1 root    root   /usr/bin/nagios2influx
+-rw-r--r--    1 root    root   /usr/share/man/man1/nagios2influx.1.gz
+-rw-r--r--    1 root    root   /usr/share/man/man5/nagios2influx.cfg.5.gz
+
+ # sudo make install 
+
+Will install these files.
+
+You can install the files anywhere you wish, but you will need to adjust configuration accordingly. YMMV.
+
+Nagios Configuration
+====================
+
+Ensure that you have service checks producing performace data in the standard format.
+
+Ensure that these service have process_perf_data=1
+
+In nagios.cfg:
+--------------
+
+	process_performance_data=1				# to enable processing
+	service_perfdata_command=process-service-perfdata	# standard command to produce performance data
+	service_perfdata_file_processing_interval=120		# or adjust for you local setup
+	service_perfdata_file_processing_command=process-service-perfdata-file # Call nagios2influx on the datafile
+
+In commands.cfg:
+----------------
+
+	1. Confirm the defauls definition for process-service-perfdata
+
+	# 'process-service-perfdata' command definition
+	define command{
+        	command_name    process-service-perfdata
+        	command_line    /usr/bin/printf "%b" "$LASTSERVICECHECK$\t$HOSTNAME$\t$SERVICEDESC$\t$SERVICESTATE$\t$SERVICEATTEMPT$\t$SERVICESTATETYPE$\t$SERVICEEXECUTIONTIME$\t$SERVICELATENCY$\t$SERVICEOUTPUT$\t$SERVICEPERFDATA$\n" >> /var/nagios/service-perfdata.out
+        }
+
+	2. Add the definition for process-service-perfdata-file
+
+	define command{
+		command_name            process-service-perfdata-file
+		command_line            /usr/local/bin/nagios-perf > /tmp/nagios-perf 2>&1
+		}
+
+	Note: in this last step nagios-perf can be replace be a direct call to nagios2influx, but calling the wrapper script means that changes can be made while adjusting the configuration without requiring to restart nagios, and aids debugging.
+
+The above configuration will write a performace datafile into the location and of the format expected by the default nagios2influx.cfgiguration. If you wish to change the location or or format of this file see the nagios2influx man pages on how change the configuration.
+
+It is recommended that once you have grafana dashboards presenting data for each host, to add action_url properties to your host templates of the form:
+
+	action_url http://<grafana-server>:<grafana-port>/dashboard/db/$HOSTNAME$
+
+
+Integration with nagiosgraph
+============================
+
+Install nagiosgraph as per standard instructions.
+
+This results in:
+
+nagios.cfg:
+	service_perfdata_file=/var/spool/nagios/perfdata.log
+	service_perfdata_file_template=$LASTSERVICECHECK$||$HOSTNAME$||$SERVICEDESC$||$SERVICEOUTPUT$||$SERVICEPERFDATA$
+
+command.cfg:
+	define command {
+  		command_name process-service-perfdata-for-nagiosgraph
+  		command_line /usr/libexec/nagiosgraph/insert.pl
+	}
+
+In order for nagios2influx to process this file before insert.pl, make the followong changes.
+
+command.cfg:
+	define command {
+  		command_name process-service-perfdata-for-nagiosgraph
+		command_line /usr/bin/nagios-perf > /tmp/nagios-perf 2>&1 
+	}
+
+nagios-perf:
+	#! /bin/bash
+	/usr/bin/nagios2influx -n 
+	/usr/libexec/nagiosgraph/insert.pl
+
+	Note the -n option to nagios2influx
+
+nagios2influx.cfg: change the following
+	perfdata=/var/spool/nagios/perfdata.log
+	perfdelimiter=\|\|
+	perfformat=time||tag=hostname||label||void||data
+
+

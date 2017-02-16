@@ -1,0 +1,3 @@
+#! /bin/bash
+/usr/bin/nagios2influx -n | nc -u localhost 8089
+#/usr/libexec/nagiosgraph/insert.pl

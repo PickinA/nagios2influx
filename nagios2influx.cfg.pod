@@ -1,0 +1,138 @@
+=pod
+
+=encoding utf8
+
+=head1 nagios2influx.cfg
+
+nagios2influx.cfgiguration file.
+
+
+=head1 DESCRIPTION
+
+Configuration is line based. Comments can be added by prefixing with "#".
+The default location for this file is /etc/nagios/nagios2influx.cfg.
+
+=head1 OPTIONS
+
+Options are case insensitive.
+
+=over 8
+
+=item B<database>
+
+This option is required when writing to InfluxDB's TCP listener.
+ 
+=item B<debug>
+
+The debug verbosity to be used if not specified on the command line. 
+
+=item B<global_prefix>
+
+If specified, all metrics will be prefixed with this value and a ".".
+
+=item B<output>
+
+stdout: parsed results are written to stdout. This is the expected mechanism to write to InfluxDB's UDP listener.
+
+The URL (in the form http://I<host>:I<port>) of InfluxDB's TCP listener.
+
+=item B<username> B<password>
+
+Required when writing to InfluxDB's TCP listener with authentication enabled.
+
+=item B<perfdata>
+
+The locaiton of the Nagios performance datafile.
+
+=item B<perfdelimiter>
+
+A regular experession used to break a performance datafile line into component fields.
+
+=item B<perfformat>
+
+The format of the performance dataline line. Delimiters here must be literals.
+
+Columns can be described in one of the following ways.
+
+=over 8
+
+=item B<data>
+
+The performace data. Metics must follow the Nagios performace data standard. See Nagios documentation for further details.
+
+=item B<label>
+
+The name on the metric. This is usually the service name.
+
+=item B<tag=name>
+
+A field used to tag the metric with the value given be name.
+
+=item B<time>
+
+The timestamp field .
+
+=item B<void>
+
+A field to be discarded.
+
+=back
+
+=back
+
+=head1 EXAMPLES
+
+To process the Nagios default installed performace datafile of format:
+
+$LASTSERVICECHECK$\t$HOSTNAME$\t$SERVICEDESC$\t$SERVICESTATE$\t$SERVICEATTEMPT$\t$SERVICESTATETYPE$\t$SERVICEEXECUTIONTIME$\t$SERVICELATENCY$\t$SERVICEOUTPUT$\t$SERVICEPERFDATA$
+
+Results are written to InfluxDB's Nagios database (via local TCP listener).
+
+ database=Nagios
+ debug=0
+ global_prefix=nagios
+ output=http://localhost:8086
+ username=nagios
+ password=nagios
+ perfdata=/var/nagios/service-perfdata.out
+ perfdelimiter=\t
+ perfformat=time	tag=hostname	label	tag=state	void	void	void	void	void	data
+
+Note: the format here uses tabs.
+
+
+To process the preformace data format used by the nagiosgraphs plugin specified as
+
+$LASTSERVICECHECK$||$HOSTNAME$||$SERVICEDESC$||$SERVICEOUTPUT$||$SERVICEPERFDATA$
+
+ debug=0
+ perfdata=/var/spool/nagios/perfdata.log
+ perfdelimiter=\|\|
+ perfformat=time||tag=hostname||label||void||data
+ output=stdout
+
+Metrics are written to stdout. 
+
+If the -n (or --preserve)  option is used on the command line, the datafile can be processes by nagiosgraph after being processed by nagios2influx.
+Note the need to esacape the delimiter.
+
+=head1 ENVIRONMENT
+
+None.
+
+=head1 FILES
+
+=over 8
+
+=item F</usr/bin/nagios2influx>
+
+=back
+
+=head1 AUTHOR
+
+Andrew Pickin
+
+=head1 SEE ALSO
+
+L<nagios2influx(1)>
+
