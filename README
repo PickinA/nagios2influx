@@ -64,9 +64,9 @@ In commands.cfg:
 		command_line            /usr/local/bin/nagios-perf > /tmp/nagios-perf 2>&1
 		}
 
-	Note: in this last step nagios-perf can be replace be a direct call to nagios2influx, but calling the wrapper script means that changes can be made while adjusting the configuration without requiring to restart nagios, and aids debugging.
+	Note: in this last step nagios-perf can be replaced by a direct call to nagios2influx, but calling the wrapper script means that changes can be made while adjusting the configuration without requiring to restart nagios, and aids debugging.
 
-The above configuration will write a performace datafile into the location and of the format expected by the default nagios2influx.cfgiguration. If you wish to change the location or or format of this file see the nagios2influx man pages on how change the configuration.
+The above configuration will write a performace datafile into the location, and of the format expected by the default nagios2influx.cfgiguration. If you wish to change the location or format of this file then see the nagios2influx man pages on how change the configuration.
 
 It is recommended that once you have grafana dashboards presenting data for each host, to add action_url properties to your host templates of the form:
 
