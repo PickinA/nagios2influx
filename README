@@ -1,13 +1,13 @@
 nagios2influx takes Nagios performance data and writes it directly into InfluxDB's time sequence database in order that this data might be presented, for example using Grafana.
 
-The notivation for this plugin can when I failed to to get other projects to work based that were around the Graphite interface. I had no need for Graphite and thought there should be a simpler and more straight forward solution. I had previously used the nagiosgraph plugin (indeed still do) to display graphic historic data from Nagios. However I wanted to get the performance data into other dashboards where data is gathered from other sources.  
+The notivation for this plugin came when I failed to to get other projects, based that were around the carbon/graphite interface, to work. I had no need for Graphite and thought there should be a simpler and more straight forward solution. I had previously used the nagiosgraph plugin (indeed still do) to display graphic historic data from Nagios. However I wanted to get the performance data into other dashboards where data is gathered from other sources.  
 
 Installation
 ============
 
 Install nagios, influxdb and grafana.
 
-The make file is capable of building RPM and Debian like package, using 
+The make file is capable of building RPM and Debian like packages, using 
 
  # make rpm
 
@@ -66,7 +66,7 @@ In commands.cfg:
 
 	Note: in this last step nagios-perf can be replaced by a direct call to nagios2influx, but calling the wrapper script means that changes can be made while adjusting the configuration without requiring to restart nagios, and aids debugging.
 
-The above configuration will write a performace datafile into the location, and of the format expected by the default nagios2influx.cfgiguration. If you wish to change the location or format of this file then see the nagios2influx man pages on how change the configuration.
+The above configuration will write a performace datafile into the location, and of the format expected by the default nagios2influx.cfg  configuration. If you wish to change the location or format of this file then see the nagios2influx man pages on how change the configuration.
 
 It is recommended that once you have grafana dashboards presenting data for each host, to add action_url properties to your host templates of the form:
 
