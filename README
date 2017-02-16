@@ -1,6 +1,6 @@
 nagios2influx takes Nagios performance data and writes it directly into InfluxDB's time sequence database in order that this data might be presented, for example using Grafana.
 
-The notivation for this plugin came when I failed to to get other projects, based that were around the carbon/graphite interface, to work. I had no need for Graphite and thought there should be a simpler and more straight forward solution. I had previously used the nagiosgraph plugin (indeed still do) to display graphic historic data from Nagios. However I wanted to get the performance data into other dashboards where data is gathered from other sources.  
+The motivation for this plugin came when I failed to to get other projects, based that were around the carbon/graphite interface, to work. I had no need for Graphite and thought there should be a simpler and more straight forward solution. I had previously used the nagiosgraph plugin (indeed still do) to display graphic historic data from Nagios. However I wanted to get the performance data into other dashboards where data is gathered from other sources.  
 
 Installation
 ============
