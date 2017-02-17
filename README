@@ -90,7 +90,7 @@ command.cfg:
   		command_line /usr/libexec/nagiosgraph/insert.pl
 	}
 
-In order for nagios2influx to process this file before insert.pl, make the followong changes.
+In order for nagios2influx to process this file before insert.pl, make the following changes.
 
 command.cfg:
 	define command {
