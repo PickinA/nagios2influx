@@ -14,7 +14,7 @@ GetOptions (
     "d|debug=s"    => \$debug,
     "f|file=s"     => \$config,
     "D|perfdata=s" => \$perfdata,
-    "h|help=s"     => \$help,
+    "h|help"       => \$help,
     "n|preserve"   => \$preserve,
     "N|dryrull"    => \$dryrun,
     "T|timefactor" => \$timefactor)
@@ -46,7 +46,7 @@ Log ($LogLvl{Settings}, "--");
 
 process($Config{perfdata});
 
-sub help {
+sub Usage {
 	print "$PROG\t[-d|--debug debug] [-D|--perfdata file]\n";
 	print "\t\t[-f|--file file] [-n|--preserve] [-N|--dryrun]\n";
 	print "\t\t[-T|--timefactor]\n";
