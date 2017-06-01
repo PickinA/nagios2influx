@@ -6,7 +6,7 @@ use File::Basename;
 
 my $PROG = basename($0);
 
-$VERSION = '1.0.0';
+$VERSION = '1.0.1';
 $config = '/etc/nagios/nagios2influx.cfg';
 %Config;
 
@@ -295,7 +295,7 @@ Debug level is a bit mask. Default is 0 (silent).
   8: configuration settings
  16: deconstruction of the perfdata line format
  32: displays raw perfdata line
- 64: displays the prefdata parse into separate metrics.
+ 64: displays the prefdata parsed into separate metrics.
 
 See B<Examples>.
 
